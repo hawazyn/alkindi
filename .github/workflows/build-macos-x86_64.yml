@@ -1,0 +1,50 @@
+name: Build liboqs for macOS x86_64
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-version:
+        description: 'liboqs release version'
+        required: true
+
+jobs:
+  build-macos-x86_64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Clone liboqs repository
+        run: |
+          git clone https://github.com/open-quantum-safe/liboqs.git
+          cd liboqs
+          git checkout ${{ inputs.release-version }}
+
+      - name: Configure building flags
+        run: |
+          export CC=clang
+          export CXX=clang++
+          cmake -S liboqs -B liboqs/build \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+            -DOQS_BUILD_ONLY_LIB=ON \
+            -DOQS_MINIMAL_BUILD="KEM_ml_kem_512; \
+                                 KEM_ml_kem_768; \
+                                 KEM_ml_kem_1024; \
+                                 SIG_ml_dsa_44; \
+                                 SIG_ml_dsa_65; \
+                                 SIG_ml_dsa_87" \
+            -DOQS_DIST_BUILD=OFF \
+            -DOQS_USE_OPENSSL=OFF
+
+      - name: Build and install
+        run: |
+         cmake --build liboqs/build --config Release
+         cmake --install liboqs/build
+         mv ${{ github.workspace }}/install ${{ github.workspace }}/liboqs_${{ inputs.release-version }}_macos_x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.6.1
+        with:
+          name: liboqs-${{ inputs.release-version }}-macos-x86_64
+          path: |
+            ${{ github.workspace }}/liboqs_${{ inputs.release-version }}macos-x86_64/*

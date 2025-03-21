@@ -1,0 +1,54 @@
+name: Build liboqs for Linux x86_64
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-version:
+        description: 'liboqs release version'
+        required: true
+
+jobs:
+  build-linux-x86_64:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Clone liboqs repository
+        run: |
+          git clone https://github.com/open-quantum-safe/liboqs.git
+          cd liboqs
+          git checkout ${{ inputs.release-version }}
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake clang
+
+      - name: Configure building flags
+        run: |
+          export CC=clang
+          export CXX=clang++
+          cmake -S liboqs -B liboqs/build \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+            -DOQS_BUILD_ONLY_LIB=ON \
+            -DOQS_MINIMAL_BUILD="KEM_ml_kem_512; \
+                                 KEM_ml_kem_768; \
+                                 KEM_ml_kem_1024; \
+                                 SIG_ml_dsa_44; \
+                                 SIG_ml_dsa_65; \
+                                 SIG_ml_dsa_87" \
+            -DOQS_DIST_BUILD=OFF \
+            -DOQS_USE_OPENSSL=OFF \
+            -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
+
+      - name: Build and install
+        run: |
+          cmake --build liboqs/build --config Release
+          cmake --install liboqs/build
+          mv ${{ github.workspace }}/install ${{ github.workspace }}/liboqs_${{ inputs.release-version }}_linux_x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.6.1
+        with:
+          name: liboqs-${{ inputs.release-version }}-linux-x86_64
+          path: |
+            ${{ github.workspace }}/liboqs_${{ inputs.release-version }}_linux_x86_64/*

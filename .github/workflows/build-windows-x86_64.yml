@@ -1,0 +1,61 @@
+name: Build liboqs for Windows x86_64
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-version:
+        description: 'liboqs release version'
+        required: true
+
+jobs:
+  build-windows-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2.27.0
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-clang mingw-w64-x86_64-cmake mingw-w64-x86_64-make mingw-w64-x86_64-binutils git
+
+      - name: Clone liboqs repository
+        shell: msys2 {0}
+        run: |
+          git clone https://github.com/open-quantum-safe/liboqs.git
+          cd liboqs
+          git checkout ${{ inputs.release-version }}
+
+      - name: Configure building flags
+        shell: msys2 {0}
+        run: |
+          cmake -S liboqs -B liboqs/build \
+            -G "MinGW Makefiles" \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_MAKE_PROGRAM=mingw32-make \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
+            -DOQS_BUILD_ONLY_LIB=ON \
+            -DOQS_MINIMAL_BUILD="KEM_ml_kem_512; \
+                                 KEM_ml_kem_768; \
+                                 KEM_ml_kem_1024; \
+                                 SIG_ml_dsa_44; \
+                                 SIG_ml_dsa_65; \
+                                 SIG_ml_dsa_87" \
+            -DOQS_DIST_BUILD=OFF \
+            -DOQS_USE_OPENSSL=OFF
+
+      - name: Build and install
+        shell: cmd
+        run: |
+          cmake --build liboqs/build --config Release
+          cmake --install liboqs/build
+          move ${{ github.workspace }}\install liboqs_${{ inputs.release-version }}_windows_x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.6.1
+        with:
+          name: liboqs-${{ inputs.release-version }}-windows-x86_64
+          path: ${{ github.workspace }}/liboqs_${{ inputs.release-version }}_windows_x86_64/*
